@@ -1,0 +1,5 @@
+fastapi
+pydantic
+typing
+uvicorn
+python-multipart

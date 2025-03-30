@@ -1,0 +1,61 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Log and runtime files
+*.log
+*.out
+*.lock
+*.tmp
+*.bak
+
+# Editor/IDE specific
+.idea
+.vscode
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Data and ML artifacts
+*.csv
+*.parquet
+*.pkl
+
+# Large datasets and media
+data/*
+media/*
+*.zip
+*.rar
+*.tar.gz
+
+# Build artifacts
+build/
+dist/
+target/
+
+# Documentation
+docs/_build/
+
+# Other
+pip-log.txt
+pip-delete-this-directory.txt
+*.manifest
+*.spec
