@@ -5,14 +5,18 @@ from typing import Optional, Dict, Any
 import uvicorn
 import uuid
 import os
+import pandas as pd
+
+from selection import extract_features, ModelSelector
+
 
 app = FastAPI(title="Time Series Imputation API", version="0.1")
 
 # In-memory storage for simplicity (can be replace with database/file storage)
 datasets = {}  # dataset_id -> file path or data object
 preprocessed_data = {}  # dataset_id -> {"data": ..., "features": ...}
-lookup_matrix = {}  # feature vectors to performance records (dummy for now)
 model_performance_records = {}  # dataset_id -> evaluation metrics
+model_selector = ModelSelector.load()
 
 
 # ---------------------------
@@ -51,18 +55,14 @@ async def upload_dataset(file: UploadFile = File(...)):
     """
     Upload a dataset file and return a unique dataset_id.
     """
-    # Generate a unique dataset id
     dataset_id = str(uuid.uuid4())
     file_location = f"uploaded_datasets/{dataset_id}_{file.filename}"
-
-    # Ensure the directory exists
     os.makedirs("uploaded_datasets", exist_ok=True)
 
     with open(file_location, "wb") as f:
         content = await file.read()
         f.write(content)
 
-    # Store the file path in the in-memory datasets dict
     datasets[dataset_id] = file_location
     return {"dataset_id": dataset_id, "filename": file.filename}
 
@@ -76,23 +76,32 @@ async def preprocess_dataset(request: PreprocessRequest):
     if dataset_id not in datasets:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    # Dummy preprocessing: read file, convert dates to indices, detect missing rates, etc.
-    # Replace this with your actual preprocessing logic.
-    # For now, we assume the preprocessed data is a dict and the feature vector is another dict.
-    preprocessed = {"dummy_data": "preprocessed_content"}
-    features = {
-        "length": 100,
-        "missing_rate": 0.1,
-        "trend_strength": 0.5,
-        "seasonality": True,
-    }
+    # Load dataset using pandas (assumes CSV for simplicity)
+    try:
+        df = pd.read_csv(
+            datasets[dataset_id], parse_dates=True, infer_datetime_format=True
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading dataset: {e}")
 
-    preprocessed_data[dataset_id] = {"data": preprocessed, "features": features}
+    # Simple preprocessing: if there is a 'date' column, set it as index.
+    if "date" in df.columns:
+        try:
+            df["date"] = pd.to_datetime(df["date"])
+            df.set_index("date", inplace=True)
+        except Exception as e:
+            print(f"Warning: Error processing date column: {e}")
+
+    # Extract features using the selection module function
+    features = extract_features(df)
+
+    # Store preprocessed data and features in memory
+    preprocessed_data[dataset_id] = {"data": df, "features": features}
 
     return {
         "dataset_id": dataset_id,
-        "preprocessed_data": preprocessed,
         "features": features,
+        "message": "Preprocessing complete",
     }
 
 
@@ -103,18 +112,20 @@ async def select_model(request: SelectModelRequest):
     If override_model is provided, return that model.
     """
     dataset_id = request.dataset_id
+    print(preprocessed_data)
     if dataset_id not in preprocessed_data:
         raise HTTPException(
             status_code=404, detail="Preprocessed data not found for this dataset"
         )
 
-    # Check for model override
+    features = preprocessed_data[dataset_id]["features"]
+
+    # If the user provided an override, return that
     if request.override_model:
         selected_model = request.override_model
     else:
-        # Dummy selection logic: Here, you would query your lookup matrix and decision tree model.
-        # For now, we simply return a hard-coded model recommendation.
-        selected_model = "knn_imputation"
+        # Use the model_selector to predict the best candidate based on features
+        selected_model = model_selector.predict(features)
 
     return {"dataset_id": dataset_id, "selected_model": selected_model}
 
@@ -123,7 +134,7 @@ async def select_model(request: SelectModelRequest):
 async def impute_dataset(request: ImputeRequest):
     """
     Impute the missing values in the dataset using the selected model.
-    Also, split the dataset (e.g., last 10-20% for evaluation) and compute performance metrics.
+    (Placeholder logic: replace with calls to your imputation model wrappers.)
     """
     dataset_id = request.dataset_id
     selected_model = request.selected_model
@@ -132,21 +143,22 @@ async def impute_dataset(request: ImputeRequest):
             status_code=404, detail="Preprocessed data not found for this dataset"
         )
 
-    # Dummy imputation logic:
-    # Replace this with code that applies the chosen imputation model to the preprocessed data.
-    imputed_result = {"dummy": "imputed_data"}
-    evaluation_metrics = {
-        "rmse": 0.5,
-        "mae": 0.3,
-    }  # These should be model-specific metrics
+    # Dummy imputation: here you would call the specific imputation model's .impute() method.
+    # For now, we return the preprocessed data without change.
+    imputed_data = (
+        preprocessed_data[dataset_id]["data"]
+        .fillna(method="ffill")
+        .fillna(method="bfill")
+    )
 
-    # Save the performance record (for future lookup/feedback update)
+    # Dummy evaluation metrics (replace with real evaluation logic)
+    evaluation_metrics = {"rmse": 0.5, "mae": 0.3}
     model_performance_records[dataset_id] = evaluation_metrics
 
     return {
         "dataset_id": dataset_id,
         "selected_model": selected_model,
-        "imputed_data": imputed_result,
+        "imputed_data": imputed_data.head(10).to_dict(),  # sending a sample for brevity
         "evaluation_metrics": evaluation_metrics,
     }
 
@@ -161,7 +173,6 @@ async def evaluate_dataset(dataset_id: str, metric: Optional[str] = None):
             status_code=404, detail="Evaluation metrics not found for this dataset"
         )
 
-    # Optionally filter by a specific metric
     metrics = model_performance_records[dataset_id]
     if metric:
         return {metric: metrics.get(metric, "Metric not found")}
@@ -174,10 +185,24 @@ async def update_feedback(request: UpdateFeedbackRequest):
     Update the lookup matrix and decision tree with new model performance data and user feedback.
     """
     dataset_id = request.dataset_id
-    # Here you would update your persistent lookup matrix and retrain your decision tree model.
-    # For now, we just log the feedback.
-    # Example: update_lookup_matrix(dataset_id, request.model_performance)
-    #          retrain_decision_tree()
+    # In a real implementation, update the model_selector with the performance data:
+    # For demonstration, assume we consider the current dataset features and performance to indicate the best model.
+    if dataset_id not in preprocessed_data:
+        raise HTTPException(
+            status_code=404, detail="Dataset not found for feedback update"
+        )
+
+    features = preprocessed_data[dataset_id]["features"]
+    # Here you would use the performance data to decide the best model.
+    # For now, we assume the best model reported in feedback is the best.
+    best_model = request.model_performance.get(
+        "best_model", model_selector.candidate_models[0]
+    )
+    model_selector.add_record(features, best_model)
+    model_selector.train()
+    # Save updated model_selector
+    model_selector.save()
+
     return {"dataset_id": dataset_id, "status": "Feedback updated successfully"}
 
 

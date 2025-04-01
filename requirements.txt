@@ -3,3 +3,10 @@ pydantic
 typing
 uvicorn
 python-multipart
+pandas
+numpy
+scipy
+scikit-learn
+openai
+python-dotenv
+xgboost
