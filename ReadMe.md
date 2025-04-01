@@ -36,12 +36,14 @@ Implementation of ==time-series imputation system== that selects appropriate mod
   - Complexity (low, medium, high)
   - Univariate vs. Multivariate
 <br/>
+
 - *Columns: Imputation models*
   - Simple models (mean, median, linear interpolation)
   - Intermediate models (spline, ARIMA, exponential smoothing)
   - Advanced models (KNN, regression-based, MICE)
   - LLM APis (gpt-4o, claude, ibm-granite)
 <br/>
+
 - *Cell Values: Performance metrics*
   - Mean Absolute Error (MAE)
   - Root Mean Squared Error (RMSE)
