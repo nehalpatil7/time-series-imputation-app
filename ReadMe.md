@@ -6,7 +6,7 @@
 <br/>
 <br/>
 
-Implementation of ==time-series imputation system== that selects appropriate models based on dataset characteristics. The system uses a ==matrix-based lookup== approach combined with a ==decision tree== to determine the most suitable imputation method for different types of time-series data.
+Implementation of <mark>time-series imputation system</mark> that selects appropriate models based on dataset characteristics. The system uses a <mark>matrix-based lookup</mark> approach combined with a <mark>decision tree</mark> to determine the most suitable imputation method for different types of time-series data.
 
 > Core Objectives
 - Build a system for imputing missing values in time-series data
