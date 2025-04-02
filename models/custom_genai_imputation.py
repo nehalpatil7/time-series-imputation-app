@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-import openai
+from openai import OpenAI
 from dotenv import load_dotenv
 import os
 
@@ -11,11 +11,15 @@ import os
 load_dotenv('secrets.env')
 
 class CustomGenAIImputationModel:
-    def __init__(self, model: str = "claude-3.7-sonnet"):
+
+    def __init__(self, model: str = "anthropic/claude-3.7-sonnet"):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise ValueError("OPENROUTER_API_KEY not found in secrets.env")
-        openai.api_key = api_key
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
         self.model = model
 
     def fit(self, df: pd.DataFrame):
@@ -26,44 +30,75 @@ class CustomGenAIImputationModel:
         # For illustration, summarize the dataset and call the genAI API.
         # Prepare a prompt that includes basic statistics.
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        if not numeric_cols:
+            return df
+
+        col = numeric_cols[0]
+        missing_indices = df[df[col].isna()].index
+        if missing_indices.empty:
+            return df
+
+        # Convert timestamps to simpler format for the API
+        missing_dates = [str(idx).split()[0] for idx in missing_indices]
+
         summary = df.describe().to_string()
         prompt = (
             f"I have a time-series dataset with the following summary statistics:\n{summary}\n"
-            "Please suggest a complete imputation for missing values. "
-            "Return a JSON object mapping the index (as string) to the imputed values for the first numeric column."
+            f"The missing values are at these dates: {missing_dates}\n"
+            "Please provide imputed values for these missing dates in the following JSON format:\n"
+            '{"date_format_in_original_data": value}\n'
+            "Use the dates exactly as shown above and provide numeric values only. "
+            "Keep the response concise and complete."
         )
 
         try:
-            response = openai.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a helpful data imputation assistant.",
+                        "content": "You are an accurate time-series data imputation assistant. Always respond with valid JSON containing date-value pairs. Keep responses concise and complete.",
                     },
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=500,  # Adjust based on your needs
+                max_tokens=1000,  # Increased max tokens
             )
-            # Extract response text
-            output_text = response.choices[0].message.content
-            if output_text is None:
+
+            output_text = response.choices[0].message.content.strip()
+            if not output_text:
                 raise ValueError("Empty response from API")
-            # Assume the output is a JSON mapping index to imputed value
+
+            # Clean the response to ensure it's valid JSON
+            output_text = output_text.replace("```json", "").replace("```", "").strip()
+
+            # If the response appears truncated, try to complete it
+            if output_text.count('{') > output_text.count('}'):
+                output_text += '}'
+
+            # Parse the JSON response
             import json
-            imputed_mapping = json.loads(output_text)
+            try:
+                imputed_mapping = json.loads(output_text)
+            except json.JSONDecodeError as e:
+                print(f"Error parsing JSON response: {e}")
+                print(f"Raw response: {output_text}")
+                # Fallback to forward/backward fill
+                return df.ffill().bfill()
 
             imputed_df = df.copy()
-            col = numeric_cols[0] if numeric_cols else None
-            if col:
-                # Replace missing values in the first numeric column using the mapping
-                for idx, value in imputed_mapping.items():
-                    # Ensure we update only if the original value is missing.
-                    if pd.isnull(imputed_df.loc[idx, col]):
-                        imputed_df.loc[idx, col] = value
-                return imputed_df
-            else:
-                return df
+            # Replace missing values using the mapping
+            for date_str, value in imputed_mapping.items():
+                try:
+                    # Convert date string back to timestamp
+                    idx = pd.Timestamp(date_str)
+                    if idx in imputed_df.index and pd.isnull(imputed_df.loc[idx, col]):
+                        imputed_df.loc[idx, col] = float(value)
+                except Exception as e:
+                    print(f"Error processing date {date_str}: {e}")
+                    continue
+
+            return imputed_df
+
         except Exception as e:
             print(f"Error calling genAI API: {e}")
             # Fallback: simply forward fill
