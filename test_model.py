@@ -3,12 +3,12 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from models.linear_interpolation import LinearInterpolationModel
-from models.regression_imputation import RegressionImputationModel
-from models.knn_imputation import KNNImputationModel
+# from models.linear_interpolation import LinearInterpolationModel
+# from models.regression_imputation import RegressionImputationModel
+# from models.knn_imputation import KNNImputationModel
 from models.arima_imputation import ARIMAImputationModel
-from models.gradient_boosting_imputation import GradientBoostingImputationModel
-from models.custom_genai_imputation import CustomGenAIImputationModel
+# from models.gradient_boosting_imputation import GradientBoostingImputationModel
+# from models.mice_imputation import MICEImputationModel
 from preprocessing import load_dataset
 
 
@@ -72,18 +72,14 @@ def plot_data_side_by_side(df_original, df_missing, df_imputed, col, imputed_ind
     fig.suptitle("Data Comparison: Original, Missing, and Imputed", fontsize=16)
 
     # Original data plot
-    axes[0].plot(
-        df_original.index, df_original[col], color="blue", marker="o", markersize=3
-    )
+    axes[0].plot(df_original.index, df_original[col], color="blue")
     axes[0].set_title("Original Data")
     axes[0].set_xlabel("Date")
     axes[0].set_ylabel("Price")
     axes[0].grid(True)
 
     # Data with missing values plot
-    axes[1].plot(
-        df_missing.index, df_missing[col], color="orange", marker="o", markersize=3
-    )
+    axes[1].plot(df_missing.index, df_missing[col], color="orange")
     axes[1].set_title("Data with Missing Values")
     axes[1].set_xlabel("Date")
     axes[1].grid(True)
@@ -93,8 +89,6 @@ def plot_data_side_by_side(df_original, df_missing, df_imputed, col, imputed_ind
         df_imputed.index,
         df_imputed[col],
         color="green",
-        marker="o",
-        markersize=3,
         label="Imputed Data",
     )
 
@@ -103,7 +97,7 @@ def plot_data_side_by_side(df_original, df_missing, df_imputed, col, imputed_ind
     axes[2].grid(True)
     axes[2].legend()
 
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.tight_layout(rect=(0, 0.03, 1, 0.95))
     plt.show()
 
 
@@ -117,10 +111,10 @@ def main():
         return
 
     # If a 'Date' column exists, convert it to datetime and set it as the index.
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-        df.sort_values("Date", inplace=True)
-        df.set_index("Date", inplace=True)
+    if "Month" in df.columns:
+        df["Month"] = pd.to_datetime(df["Month"])
+        df.sort_values("Month", inplace=True)
+        df.set_index("Month", inplace=True)
     else:
         try:
             df.index = pd.to_datetime(df.index)
@@ -134,51 +128,45 @@ def main():
         return
     price_col = numeric_cols[0]
 
-    # Plot the original data
-    plt.figure(figsize=(12, 6))
-    plt.plot(df.index, df[price_col], color="blue", marker="o", markersize=3)
-    plt.title("Original Data")
-    plt.xlabel("Date")
-    plt.ylabel("Price")
-    plt.grid(True)
-    plt.show()
-
-    # Step 2: Introduce missing values:
     # a) Random missing values (10% of rows)
-    df_random_missing, random_missing_idx = introduce_missing_values(
-        df, price_col, missing_fraction=0.5
-    )
+    # df_random_missing, random_missing_idx = introduce_missing_values(
+    #     df, price_col, missing_fraction=0.5
+    # )
 
     # b) A block missing portion: e.g., from row 50 to row 70
     df_missing, block_missing_idx = introduce_block_missing_values(
-        df_random_missing, price_col, block_start=50, block_end=70
+        df, price_col, block_start=50, block_end=70
     )
 
     # Combine missing indices (block and random) for later highlighting.
-    imputed_indices = block_missing_idx.union(random_missing_idx)
+    # imputed_indices = block_missing_idx.union(block_missing_idx)
 
-    # Plot data with missing values (side by side, we use individual plots here for clarity)
-    plt.figure(figsize=(12, 6))
-    plt.plot(
-        df_missing.index,
-        df_missing[price_col],
-        color="orange",
-        marker="o",
-        markersize=3,
+    # Step 3: Use SARIMA to impute missing values.
+    # Correct instantiation with seasonal order for monthly data (S=12)
+    # Try different P, D, Q orders if needed, e.g., (1,1,0,12), (0,1,1,12) etc.
+    arima_model = ARIMAImputationModel(
+        order=(1, 1, 1),  # Non-seasonal order (p, d, q)
+        seasonal_order=(1, 1, 0, 12),  # Seasonal order (P, D, Q, S) S=12 for monthly
+        target_column=price_col,  # Explicitly state the target column
+        use_forward_backward=True,  # Keep forward-backward for better gap filling
     )
-    plt.title("NFLX Data with Missing Values")
-    plt.xlabel("Date")
-    plt.ylabel("Price")
-    plt.grid(True)
-    plt.show()
+    # lin_interp_model = GradientBoostingImputationModel() # Keep other models commented out
+    # lin_interp_model = MICEImputationModel()
 
-    # Step 3: Use Linear Interpolation to impute missing values.
-    lin_interp_model = CustomGenAIImputationModel()
-    lin_interp_model.fit(df_missing)  # Not necessary, but for consistency.
-    df_imputed = lin_interp_model.impute(df_missing)
+    # Use fit and transform as per the revised model structure
+    print("Fitting ARIMA model...")
+    # Fit might not be strictly necessary if transform handles it, but good practice
+    arima_model.fit(df_missing)  # Fit on the data with missing values
+
+    print("Transforming (imputing) data...")
+    # Impute the dataframe that has the missing block
+    df_imputed = arima_model.transform(df_missing)
+
+    # lin_interp_model = KNNImputationModel()
+    # df_imputed = lin_interp_model.transform(df_missing)
 
     # Plot all three side by side with imputed points highlighted
-    plot_data_side_by_side(df, df_missing, df_imputed, price_col, imputed_indices)
+    plot_data_side_by_side(df, df_missing, df_imputed, price_col, block_missing_idx)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 
 import pandas as pd
 import numpy as np
-from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
