@@ -19,6 +19,10 @@ class LinearInterpolationModel:
         imputed_df = df.interpolate(method="linear")
         return imputed_df
 
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Alias for impute to maintain consistent API
+        return self.impute(df)
+
     def evaluate(self, df: pd.DataFrame, holdout: pd.DataFrame) -> dict:
         imputed_holdout = self.impute(holdout)
         # Evaluate on the first numeric column.

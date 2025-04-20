@@ -7,7 +7,7 @@ from preprocessing import (
     preprocess_dataset,
 )
 from evaluation import split_data, compute_metrics
-from selection import extract_features, ModelSelector
+from selection import extract_features, ImputationModelSelector
 from storage import save_object, load_object
 
 # Import candidate models from the models folder
@@ -19,8 +19,7 @@ from models import (
     KNNImputationModel,
     RegressionImputationModel,
     MICEImputationModel,
-    GradientBoostingImputationModel,
-    CustomGenAIImputationModel,
+    GradientBoostingImputationModel
 )
 
 
@@ -36,17 +35,15 @@ def get_model_by_name(model_name: str, **kwargs):
         "knn_imputation": KNNImputationModel,
         "regression_imputation": RegressionImputationModel,
         "mice_imputation": MICEImputationModel,
-        "gradient_boosting_imputation": GradientBoostingImputationModel,
-        "custom_genai_imputation": CustomGenAIImputationModel,
+        "gradient_boosting_imputation": GradientBoostingImputationModel
     }
     model_cls = model_mapping.get(model_name.lower())
     if model_cls is None:
         raise ValueError(f"Model {model_name} is not recognized.")
     return model_cls(**kwargs)
 
-
 def run_pipeline(
-    file_path: str, holdout_percent: float = 0.15, override_model: str = None
+    file_path: str, holdout_percent: float = 0.15, override_model: str | None = None
 ):
     # Step 1: Load dataset
     print("Loading dataset...")
@@ -64,7 +61,7 @@ def run_pipeline(
     )
 
     # Step 4: Use ModelSelector to recommend a candidate model unless overridden
-    model_selector = ModelSelector.load()
+    model_selector = ImputationModelSelector.load()
     if override_model:
         best_model_name = override_model
     else:

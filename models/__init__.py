@@ -6,7 +6,6 @@ from .knn_imputation import KNNImputationModel
 from .regression_imputation import RegressionImputationModel
 from .mice_imputation import MICEImputationModel
 from .gradient_boosting_imputation import GradientBoostingImputationModel
-from .custom_genai_imputation import CustomGenAIImputationModel
 
 __all__ = [
     "LinearInterpolationModel",
@@ -16,6 +15,5 @@ __all__ = [
     "KNNImputationModel",
     "RegressionImputationModel",
     "MICEImputationModel",
-    "GradientBoostingImputationModel",
-    "CustomGenAIImputationModel",
+    "GradientBoostingImputationModel"
 ]

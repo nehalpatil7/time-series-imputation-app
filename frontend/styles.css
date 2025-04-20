@@ -1,0 +1,421 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+body {
+    background-color: #f5f7fa;
+    color: #333;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.card {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 30px;
+    padding: 25px;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.header h1 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+.header p {
+    color: #7f8c8d;
+    font-size: 1.1em;
+}
+
+.upload-container {
+    text-align: center;
+    border: 2px dashed #bdc3c7;
+    border-radius: 6px;
+    padding: 30px;
+    transition: all 0.3s;
+    margin-bottom: 20px;
+}
+
+.upload-container:hover, .drag-over {
+    border-color: #3498db;
+    background-color: rgba(52, 152, 219, 0.05);
+}
+
+.file-input {
+    display: none;
+}
+
+.upload-btn, .analyze-btn {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    margin-top: 10px;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s;
+    height: 40px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-btn:hover, .analyze-btn:hover {
+    background-color: #2980b9;
+}
+
+.analyze-btn {
+    margin-top: 20px;
+    width: 100%;
+}
+
+.error {
+    color: #e74c3c;
+    margin-top: 10px;
+}
+
+.feature-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 15px 0;
+}
+
+.feature-badge {
+    background-color: #f1f8fe;
+    color: #3498db;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.9em;
+}
+
+.chart-container {
+    height: 350px;
+    margin: 20px 0 40px 0;
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.control-group {
+    flex: 1;
+    min-width: 200px;
+}
+
+.control-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.control-group select {
+    width: 100%;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+.results h4 {
+    margin-top: 15px;
+    margin-bottom: 5px;
+}
+
+.spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border-left-color: #3498db;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.hidden {
+    display: none;
+}
+
+.status-message {
+    text-align: center;
+    color: #b0b0b0;
+}
+
+.warning-sup {
+    color: #e74c3c;
+    font-size: 0.7em;
+    vertical-align: super;
+    margin-left: 3px;
+}
+
+.feature-note {
+    color: #7f8c8d;
+    font-style: italic;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.axis-selectors {
+    display: flex;
+    gap: 20px;
+    margin: 15px 0;
+    border-top: 1px solid #eee;
+    padding-top: 15px;
+}
+
+.axis-selectors .control-group {
+    flex: 1;
+    min-width: 180px;
+}
+
+.axis-selectors select {
+    width: 100%;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    background-color: #fff;
+    font-family: inherit;
+}
+
+.error-message {
+    color: #d32f2f;
+    font-size: 0.85rem;
+    margin-top: 4px;
+    margin-bottom: 0;
+}
+
+.chart-error {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 350px;
+    background-color: rgba(240, 240, 240, 0.5);
+    color: #d32f2f;
+    font-size: 16px;
+    text-align: center;
+    border-radius: 4px;
+}
+
+.info-message {
+    color: #3498db;
+    font-size: 0.85rem;
+    margin-top: 4px;
+    margin-bottom: 0;
+}
+
+.button-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.analyze-btn, .upload-btn, .download-btn {
+    background-color: #3498db;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+    height: 40px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.inline-btn {
+    background-color: green;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.analyze-btn:hover, .upload-btn:hover, .download-btn:hover {
+    background-color: #2980b9;
+}
+
+.download-btn svg {
+    flex-shrink: 0;
+    margin-right: 6px;
+}
+
+.download-btn span {
+    display: inline-block;
+    line-height: 1;
+}
+
+.step-instruction {
+    color: #3498db;
+    font-style: italic;
+    font-size: 0.9em;
+    margin: 5px 0 15px 0;
+}
+
+/* ARIMA parameter styles */
+.control-group input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    background-color: #fff;
+    font-family: inherit;
+}
+
+.control-group input[type="number"]:focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+/* Smaller headings for parameter sections */
+.card h4 + .controls {
+    margin-top: 10px;
+    margin-bottom: 20px;
+}
+
+.card h4 {
+    margin-top: 15px;
+    color: #2c3e50;
+}
+
+/* Data Preview Table Styles */
+.data-preview {
+    margin: 15px 0;
+    overflow: hidden;
+}
+
+/* ARIMA diagnostic plots styles */
+.arima-diagnostics {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.diagnostic-plots {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.plot-container {
+    background-color: white;
+    border-radius: 6px;
+    padding: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.plot-container h5 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #2c3e50;
+    font-size: 0.95em;
+}
+
+.plot-container img {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+/* Table styles */
+.table-responsive {
+    overflow-x: auto;
+    max-width: 100%;
+    margin-bottom: 15px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    background-color: white;
+}
+
+.data-table th {
+    background-color: #f8f9fa;
+    color: #2c3e50;
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 15px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.data-table td {
+    padding: 8px 15px;
+    border-bottom: 1px solid #e9ecef;
+    color: #333;
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.data-table tr:hover {
+    background-color: #f1f8fe;
+}
+
+.null-value {
+    color: #dc3545;
+    font-style: italic;
+    opacity: 0.7;
+}
+
+/* Disabled button styles */
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Tooltip styling (works with title attribute) */
+[title] {
+    position: relative;
+    cursor: help;
+}
+
+/* Required field indicator */
+.required-asterisk {
+    color: #e74c3c;
+    font-weight: bold;
+    margin-left: 3px;
+}
