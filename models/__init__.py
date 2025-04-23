@@ -6,6 +6,7 @@ from .knn_imputation import KNNImputationModel
 from .regression_imputation import RegressionImputationModel
 from .mice_imputation import MICEImputationModel
 from .gradient_boosting_imputation import GradientBoostingImputationModel
+from .lstm_imputation import LSTMImputationModel
 
 __all__ = [
     "LinearInterpolationModel",
@@ -15,5 +16,6 @@ __all__ = [
     "KNNImputationModel",
     "RegressionImputationModel",
     "MICEImputationModel",
-    "GradientBoostingImputationModel"
+    "GradientBoostingImputationModel",
+    "LSTMImputationModel"
 ]

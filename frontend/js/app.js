@@ -205,7 +205,6 @@ const App = () => {
             }
 
             // Set default Y column to first numeric column that is not the Date column
-            console.log("Column Data:", columnData.column_types);
             const numericColumns = columnData.columns.filter(
                 col => columnData.column_types[col] === 'numeric' && col !== 'Date'
             );
@@ -390,8 +389,6 @@ const App = () => {
 
     // Load ARIMA diagnostic plots
     const loadArimaDiagnostics = async () => {
-        console.log("Loading ARIMA diagnostics");
-        console.log("Dataset ID:", datasetId, "Selected Y Column:", selectedYColumn);
         if (!datasetId || !selectedYColumn) return;
 
         setLoadingDiagnostics(true);

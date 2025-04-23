@@ -131,7 +131,8 @@ const getImputedDataset = async (datasetId, selectedModel, selectedYColumn, arim
         requestData.model_params = {
             order: [arimaParams.p, arimaParams.d, arimaParams.q],
             seasonal_order: [arimaParams.P, arimaParams.D, arimaParams.Q, arimaParams.s],
-            y_column: arimaParams.y_column
+            y_column: arimaParams.y_column,
+            hasSeasonality: arimaParams.hasSeasonality
         };
     }
 
@@ -156,6 +157,17 @@ const getArimaDiagnostics = async (datasetId, column) => {
     return response.data;
 };
 
+const getGBHistogram = async (datasetId, column) => {
+    let url = `${apiBaseUrl}/gb_histogram/${datasetId}`;
+
+    if (column) {
+        url += `?column=${column}`;
+    }
+
+    const response = await axios.get(url);
+    return response.data;
+};
+
 const TimeSeriesApi = {
     uploadDataset,
     preprocessDataset,
@@ -167,5 +179,6 @@ const TimeSeriesApi = {
     getDownloadUrl,
     getDatasetPreview,
     getArimaDiagnostics,
+    getGBHistogram,
     apiBaseUrl
 };

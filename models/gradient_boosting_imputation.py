@@ -1,3 +1,7 @@
+import io
+import base64
+import matplotlib.pyplot as plt
+import re
 import pandas as pd
 import numpy as np
 import xgboost as xgb
@@ -11,7 +15,7 @@ class GradientBoostingImputationModel:
     Gradient Boosting Imputation Model
     Parameters:
         params: dict | None = None,
-        num_boost_round: int = 50
+        num_boost_round: int = 500
     Returns:
         pd.DataFrame: Imputed dataframe
     """
@@ -33,6 +37,57 @@ class GradientBoostingImputationModel:
         self.forward_model = None
         self.backward_model = None
         self.model = None
+
+    def extract_number(self, val):
+        match = re.search(r"[-+]?\d*\.\d+|\d+", str(val))
+        return float(match.group(0)) if match else None
+
+    # ------------ Diagnostic Plot Function ------------
+    def generate_histogram(self, df: pd.DataFrame, column: str | None = None) -> dict:
+        """
+        Generate diagnostic plots for ARIMA time series analysis:
+        1. Histogram of the target column values to find outliers
+        Args:
+            df: DataFrame containing the time series data
+            yColumn: Column name to analyze. If None, the first numeric column will be used.
+        Returns:
+            dict: Dictionary containing base64 encoded plot images
+        """
+        if column is None:
+            raise ValueError("[XGBOOST - Diagnostic plot] yColumn must be specified")
+
+        series = df[column].copy()
+        series = series.apply(self.extract_number)
+        if len(series) == 0:
+            return {"[XGBOOST - Diagnostic plot] Error": "target column empty"}
+
+        result = {}
+
+        try:
+            bins = 10
+            if len(series) < 1000:
+                bins = min(max(10, len(series) // 20), 50)     # 10-50 bins for small datasets
+            elif len(series) <= 10000:
+                bins = min(max(50, len(series) // 100), 200)   # 50-200 bins for medium datasets
+            else:
+                bins = min(max(200, len(series) // 200), 500)  # 200-500 bins for large datasets
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.hist(series, bins=bins, edgecolor='black')
+            ax.set_title(f'Histogram of {column}')
+            ax.set_xlabel(column)
+            ax.set_ylabel('Frequency')
+            plt.tight_layout()
+
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format="png")
+            buffer.seek(0)
+            result["histogram"] = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            plt.close(fig)
+        except Exception as e:
+            return {"[XGBOOST - Diagnostic plot] Error": f"Error generating plots: {e}"}
+
+        return result
 
     def set_index(self, df: pd.DataFrame):
         """
@@ -76,9 +131,13 @@ class GradientBoostingImputationModel:
         for i in range(1, lags + 1):
             df[f"lag_{i}"] = df[self.params["yColumn"]].shift(i)
         df[f"rolling_mean_{window}"] = df[self.params["yColumn"]].shift(1).rolling(window).mean()
-        df["hour"] = df.index.hour # type: ignore
-        df["dayofweek"] = df.index.dayofweek # type: ignore
-        df["month"] = df.index.month # type: ignore
+        if isinstance(df.index, pd.DatetimeIndex):
+            df["hour"] = df.index.hour
+            df["dayofweek"] = df.index.dayofweek
+            df['quarter'] = df.index.quarter
+            df['month'] = df.index.month
+            df['year'] = df.index.year
+            df['dayofyear'] = df.index.dayofyear
         return df
 
     def fit(self, df: pd.DataFrame):
@@ -87,6 +146,7 @@ class GradientBoostingImputationModel:
         """
         if self.params["yColumn"] is None:
             raise ValueError("yColumn must be specified")
+        df[self.params["yColumn"]] = df[self.params["yColumn"]].apply(self.extract_number)
 
         print('Training XGBoost regressors...\n', end='')
         df = self.set_index(df)
@@ -126,6 +186,7 @@ class GradientBoostingImputationModel:
         for idx in df[df[self.params["yColumn"]].isna()].index:
             feat_df = self.create_features(df)
             row = feat_df.loc[[idx]].drop(columns=[self.params["yColumn"]])
+            row = row.select_dtypes(include=[np.number])
             if row.isna().any(axis=1).values[0]:
                 continue
             dmatrix = xgb.DMatrix(row)
@@ -152,7 +213,7 @@ class GradientBoostingImputationModel:
         missing_values[self.params["yColumn"]] = np.round(
             ((np.array(df_forward, dtype=float) + np.array(df_backward, dtype=float)) / 2), 2
         )
-        missing_values.reset_index(inplace=True)
+        # missing_values.reset_index(inplace=True) # toggle this if frontend recieves missing incorrect values
         return missing_values
 
     def evaluate(self, df: pd.DataFrame, n_splits: int = 5) -> dict:
@@ -188,24 +249,3 @@ class GradientBoostingImputationModel:
             "RMSE": np.mean(scores["RMSE"]),
         }
 
-
-# df = pd.read_csv("/Users/npatil14/Downloads/IITC/Assignments/CS-597/regenSystem/datasets/AirPassengers.csv")
-# model = GradientBoostingImputationModel(
-#     {
-#         "objective": "reg:squarederror",
-#         "max_depth": 8,
-#         "eta": 0.05,
-#         "verbosity": 0,
-#         "tree_method": "hist",
-#         "subsample": 0.8,
-#         "colsample_bytree": 0.8,
-#         "min_child_weight": 5,
-#         "eval_metric": "rmse",
-#         "nthread": -1,
-#         "yColumn": "Passengers",
-#     }
-# )
-# model.fit(df)
-
-# imputed_df = model.impute(df)
-# print(imputed_df)

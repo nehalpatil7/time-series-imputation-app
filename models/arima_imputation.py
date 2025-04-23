@@ -66,7 +66,7 @@ class ARIMAImputationModel:
         match = re.search(r"[-+]?\d*\.\d+|\d+", str(val))
         return float(match.group(0)) if match else None
 
-    # ------------ Diagnostic Plot Functions ------------
+    # ------------ Diagnostic Plot Function ------------
     def generate_diagnostic_plots(self, df: pd.DataFrame, column=None):
         """
         Generate diagnostic plots for ARIMA time series analysis:

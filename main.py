@@ -10,9 +10,21 @@ import pandas as pd
 import numpy as np
 import io
 import re
+import json
 from datetime import datetime
-
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from selection import extract_features, ImputationModelSelector
+from models import (
+    LinearInterpolationModel,
+    SplineImputationModel,
+    ExponentialSmoothingModel,
+    ARIMAImputationModel,
+    KNNImputationModel,
+    RegressionImputationModel,
+    MICEImputationModel,
+    GradientBoostingImputationModel,
+    LSTMImputationModel,
+)
 
 
 app = FastAPI(title="Time Series Imputation API", version="0.1")
@@ -26,11 +38,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-datasets = {}  # dataset_id -> file path or data object
-preprocessed_data = {}  # dataset_id -> {"data": ..., "features": ...}
+MODEL_PERFORMANCE_FILE = "model_performance_records.json"
+datasets = {}                   # dataset_id -> file path or data object
+preprocessed_data = {}          # dataset_id -> {"data": ..., "features": ...}
 model_performance_records = {}  # dataset_id -> evaluation metrics
-# Initialize model_selector on-demand to prevent auto-loading during import
-model_selector = None
+
+model_selector = None           # Initialize model_selector on-demand to prevent auto-loading during import
+
+
+# save model performance records to JSON
+def save_model_performance_records():
+    """
+    Save the model performance records to a JSON file.
+    """
+    try:
+        with open(MODEL_PERFORMANCE_FILE, 'w') as f:
+            json.dump(model_performance_records, f)
+        print(f"{datetime.now()} - Model performance records saved to {MODEL_PERFORMANCE_FILE}")
+    except Exception as e:
+        print(f"{datetime.now()} - Error saving model performance records: {str(e)}")
+
+
+# load model performance records from JSON
+def load_model_performance_records():
+    """
+    Load the model performance records from a JSON file.
+    """
+    global model_performance_records
+    try:
+        if os.path.exists(MODEL_PERFORMANCE_FILE):
+            with open(MODEL_PERFORMANCE_FILE, 'r') as f:
+                model_performance_records = json.load(f)
+            print(f"{datetime.now()} - Model performance records loaded from {MODEL_PERFORMANCE_FILE}")
+        else:
+            print(f"{datetime.now()} - No existing model performance records file found. Starting with empty records.")
+    except Exception as e:
+        print(f"{datetime.now()} - Error loading model performance records: {str(e)}")
+
+load_model_performance_records()
 
 
 # ---------------------------
@@ -231,13 +276,22 @@ async def update_feedback(request: UpdateFeedbackRequest):
 
     features = preprocessed_data[dataset_id]["features"]
     # use the performance data to decide the best model
-    # For now, assume best model reported in feedback is best
     best_model = request.model_performance.get(
         "best_model", model_selector.candidate_models[0]
     )
     model_selector.add_record(features, best_model)
     model_selector.train()
     model_selector.save()
+
+    # Update model performance records JSON with user feedback if provided
+    if dataset_id in model_performance_records and request.user_feedback:
+        if "user_feedback" not in model_performance_records[dataset_id]:
+            model_performance_records[dataset_id]["user_feedback"] = []
+        model_performance_records[dataset_id]["user_feedback"].append({
+            "feedback": request.user_feedback,
+            "timestamp": datetime.now().isoformat()
+        })
+        save_model_performance_records()
 
     return {"dataset_id": dataset_id, "status": "Feedback updated successfully"}
 
@@ -454,38 +508,23 @@ async def impute_dataset(request: ImputeRequest):
     df = preprocessed_data[dataset_id]["data"]
 
     print(f"Imputing with model: {selected_model}")
-
-    # Import needed modules for imputation
-    from models import (
-        LinearInterpolationModel,
-        SplineImputationModel,
-        ExponentialSmoothingModel,
-        ARIMAImputationModel,
-        KNNImputationModel,
-        RegressionImputationModel,
-        MICEImputationModel,
-        GradientBoostingImputationModel,
-    )
-
     def get_model_by_name(model_name: str):
         model_mapping = {
-            "linear_interpolation": LinearInterpolationModel(),
-            "spline_interpolation": SplineImputationModel(),
+            # "linear_interpolation": LinearInterpolationModel(),
+            # "spline_interpolation": SplineImputationModel(),
             "mean_imputation": lambda df: df.fillna(df.mean()),
-            "ffill": lambda df: df.fillna(method="ffill"),
-            "bfill": lambda df: df.fillna(method="bfill"),
-            "knn_imputation": KNNImputationModel(),
-            "regression_imputation": RegressionImputationModel(),
-            "mice_imputation": MICEImputationModel(),
+            # "knn_imputation": KNNImputationModel(),
+            # "regression_imputation": RegressionImputationModel(),
+            # "mice_imputation": MICEImputationModel(),
             "arima_imputation": ARIMAImputationModel(),
             "gb_imputation": GradientBoostingImputationModel(),
-            "lstm_imputation": None,
-            "exponential_smoothing": ExponentialSmoothingModel(),
+            "lstm_imputation": LSTMImputationModel(),
+            # "exponential_smoothing": ExponentialSmoothingModel(),
         }
         return model_mapping.get(model_name.lower())
 
     imputer = get_model_by_name(selected_model)
-    print(f"Selected imputer: {imputer.__class__.__name__ if imputer else None}")
+    print(f"[IMPUTE] Selected imputer: {imputer.__class__.__name__ if imputer else None}")
 
     if imputer is None:
         if selected_model == "mean_imputation":
@@ -500,23 +539,28 @@ async def impute_dataset(request: ImputeRequest):
                 order = tuple(model_params.get("order", (1, 1, 1)))
                 seasonal_order = tuple(model_params.get("seasonal_order", (1, 1, 1, 1)))
                 y_column = model_params.get("y_column", None)
+                hasSeasonality = model_params.get("hasSeasonality", False)
                 imputer = ARIMAImputationModel(
                     order=order,
                     seasonal_order=seasonal_order,
                     y_column=y_column,
                     use_forward_backward=True,
+                    seasonality=hasSeasonality
                 )
                 imputed_data = imputer.transform(df)
-            elif imputer.__class__.__name__ == "GradientBoostingImputationModel" and model_params:
+            elif imputer.__class__.__name__ == "GradientBoostingImputationModel":
                 imputer = GradientBoostingImputationModel(
                     {
                         "objective": "reg:squarederror",
-                        "max_depth": 8,
-                        "eta": 0.05,
+                        "max_depth": 32 if len(df) > 10000 else 8,
+                        "eta": 0.01 if len(df) > 10000 else 0.05,
+                        "grow_policy": "depthwise" if len(df) > 10000 else "lossguide",
                         "verbosity": 0,
                         "tree_method": "hist",
                         "subsample": 0.8,
+                        "early_stopping_rounds": 100 if len(df) > 10000 else 50,
                         "colsample_bytree": 0.8,
+                        "max_leaves": 128 if len(df) > 10000 else 64,
                         "min_child_weight": 5,
                         "eval_metric": "rmse",
                         "nthread": -1,
@@ -525,6 +569,21 @@ async def impute_dataset(request: ImputeRequest):
                 )
                 imputer.fit(df)
                 imputed_data = imputer.impute(df)
+            elif imputer.__class__.__name__ == "LSTMImputationModel":
+                if model_params:
+                    imputer = LSTMImputationModel(
+                        params={
+                            "epochs": 10,
+                            "dropout_rate": 0.2,
+                            "learning_rate": 0.001,
+                            "yColumn": y_column,
+                            "use_forward_backward": True
+                        },
+                        df=df,
+                        save_path=f"models/checkpoints"
+                    )
+                imputer.fit()
+                imputed_data = imputer.impute()
             else:
                 train_df = df.copy()
                 imputer.fit(train_df)
@@ -540,7 +599,6 @@ async def impute_dataset(request: ImputeRequest):
         non_null_mask = ~eval_df.isnull()
 
         import random
-
         np.random.seed(42)
 
         eval_metrics = {}
@@ -555,11 +613,10 @@ async def impute_dataset(request: ImputeRequest):
                 )
 
                 original_values = eval_df[col].iloc[test_indices].copy()
-
                 temp_df = eval_df.copy()
                 temp_df.loc[test_indices, col] = np.nan
 
-                # Impute the artificially missing values
+                # Model Accuracy Evaluator Run
                 if imputer is None or (
                     callable(imputer) and not hasattr(imputer, "fit")
                 ):
@@ -588,18 +645,66 @@ async def impute_dataset(request: ImputeRequest):
                                 y_column=y_column,
                                 use_forward_backward=True,
                             )
-                            temp_imputed = imputer.transform(df)
-                        else:
+                            temp_imputed = imputer.transform(temp_df)
+                        elif imputer.__class__.__name__ == "GradientBoostingImputationModel" and model_params:
+                            imputer = GradientBoostingImputationModel(
+                                {
+                                    "objective": "reg:squarederror",
+                                    "max_depth": 8,
+                                    "eta": 0.05,
+                                    "verbosity": 0,
+                                    "tree_method": "hist",
+                                    "subsample": 0.8,
+                                    "colsample_bytree": 0.8,
+                                    "min_child_weight": 5,
+                                    "eval_metric": "rmse",
+                                    "nthread": -1,
+                                    "yColumn": y_column,
+                                }
+                            )
                             imputer.fit(temp_df)
+                            temp_imputed = imputer.impute(temp_df)
+                        elif imputer.__class__.__name__ == "LSTMImputationModel":
+                            if model_params:
+                                imputer = LSTMImputationModel(
+                                    params={
+                                        "epochs": 10,
+                                        "dropout_rate": 0.2,
+                                        "learning_rate": 0.001,
+                                        "yColumn": y_column,
+                                        "use_forward_backward": True
+                                    },
+                                    df=temp_df,
+                                    save_path=f"models/checkpoints"
+                                )
+                                imputer.fit()
+                                temp_imputed = imputer.impute()
+                        else:
+                            imputer.fit(temp_df) # type: ignore
                             temp_imputed = imputer.transform(temp_df) # type: ignore
                     except:
                         temp_imputed = temp_df.fillna(method="ffill").fillna(
                             method="bfill"
                         )
 
-                imputed_values = temp_imputed[col].iloc[test_indices] # type: ignore
+                if isinstance(temp_imputed, pd.DataFrame) and len(temp_imputed) != len(
+                    temp_df
+                ):
+                    if "index" in temp_imputed.columns:
+                        labels = temp_imputed["index"]
+                        vals   = temp_imputed[col].values
+                    else:
+                        labels = temp_imputed.index
+                        vals   = temp_imputed[col].values
 
-                from sklearn.metrics import mean_squared_error, mean_absolute_error
+                    full_imputed = temp_df.copy()
+                    full_imputed.loc[labels, col] = vals
+                    temp_imputed = full_imputed
+
+                imputed_values = temp_imputed[col].iloc[test_indices] # type: ignore
+                valid = ~pd.isna(imputed_values)
+                original_values = original_values[valid]
+                imputed_values  = imputed_values[valid]
 
                 rmse = np.sqrt(mean_squared_error(original_values, imputed_values))
                 mae = mean_absolute_error(original_values, imputed_values)
@@ -612,22 +717,23 @@ async def impute_dataset(request: ImputeRequest):
             evaluation_metrics = {
                 "avg_rmse": float(avg_rmse),
                 "avg_mae": float(avg_mae),
-                "details": eval_metrics,
+                "success": True if eval_metrics else False
             }
         else:
             evaluation_metrics = {
-                "rmse": 0.5,
-                "mae": 0.3,
-                "note": "Default metrics (no evaluation performed)",
+                "rmse": "Failed",
+                "mae": "Failed",
+                "success": False
             }
     except Exception as e:
         print(f"{datetime.now()} - Error during evaluation: {str(e)}")
-        evaluation_metrics = {"rmse": 0.5, "mae": 0.3, "error": str(e)}
+        evaluation_metrics = {"rmse": "Failed", "mae": "Failed", "success": False}
 
     model_performance_records[dataset_id] = {
         **evaluation_metrics,
         "selected_model": selected_model,
     }
+    save_model_performance_records()
 
     return {
         "dataset_id": dataset_id,
@@ -650,35 +756,22 @@ async def get_imputed_dataset(request: ImputeRequest):
     selected_y_column = request.selected_y_column
     model_params = request.model_params
 
-    # if dataset_id not in preprocessed_data:
-    #     raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset_id not in preprocessed_data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
 
-    # if dataset_id not in model_performance_records:
-    #     raise HTTPException(
-    #         status_code=404,
-    #         detail="This dataset has not been imputed yet. Please run imputation first.",
-    #     )
+    if dataset_id not in model_performance_records:
+        raise HTTPException(
+            status_code=404,
+            detail="This dataset has not been imputed yet. Please run imputation first.",
+        )
 
-    # df = preprocessed_data[dataset_id]["data"].copy()
-    df = pd.read_csv('/Users/npatil14/Downloads/IITC/Assignments/CS-597/regenSystem/datasets/AirPassengers.csv')
+    df = preprocessed_data[dataset_id]["data"].copy()
 
-    # selected_model = selected_model if selected_model else model_performance_records.get(dataset_id, {}).get("selected_model")
+    selected_model = selected_model if selected_model else model_performance_records.get(dataset_id, {}).get("selected_model")
     if not selected_model:
         selected_model = "linear_interpolation"
 
     try:
-        from models import (
-            LinearInterpolationModel,
-            SplineImputationModel,
-            ExponentialSmoothingModel,
-            ARIMAImputationModel,
-            KNNImputationModel,
-            RegressionImputationModel,
-            MICEImputationModel,
-            GradientBoostingImputationModel
-        )
-
-        # Function to get model instance by name
         def get_model_by_name(model_name: str):
             model_mapping = {
                 "linear_interpolation": LinearInterpolationModel(),
@@ -696,7 +789,7 @@ async def get_imputed_dataset(request: ImputeRequest):
 
         # Get the imputation model
         imputer = get_model_by_name(selected_model)
-        print(f"Selected imputer: {imputer.__class__.__name__ if imputer else None}")
+        print(f"[GET IMPUTATION] Selected imputer: {imputer.__class__.__name__ if imputer else None}")
 
         # Impute using the same logic as in the /impute endpoint
         if imputer is None:
@@ -712,16 +805,17 @@ async def get_imputed_dataset(request: ImputeRequest):
                     order = tuple(model_params.get("order", (1, 1, 1)))
                     seasonal_order = tuple(model_params.get("seasonal_order", (1, 1, 1, 1)))
                     y_column = model_params.get("y_column", None)
+                    hasSeasonality = model_params.get("hasSeasonality", False)
                     imputer = ARIMAImputationModel(
                         order=order,
                         seasonal_order=seasonal_order,
                         y_column=y_column,
                         use_forward_backward=True,
-                        seasonality=True,
+                        seasonality=hasSeasonality,
                     )
                     imputed_df = imputer.transform(df)
-                elif imputer.__class__.__name__ == "GradientBoostingImputationModel" and model_params:
-                    y_column = model_params.get("y_column", None)
+                elif imputer.__class__.__name__ == "GradientBoostingImputationModel":
+                    y_column = selected_y_column if selected_y_column else None
                     imputer = GradientBoostingImputationModel(
                         {
                             "objective": "reg:squarederror",
@@ -739,6 +833,21 @@ async def get_imputed_dataset(request: ImputeRequest):
                     )
                     imputer.fit(df)
                     imputed_df = imputer.impute(df)
+                elif imputer.__class__.__name__ == "LSTMImputationModel":
+                    if model_params:
+                        imputer = LSTMImputationModel(
+                            params={
+                                "epochs": 10,
+                                "dropout_rate": 0.2,
+                                "learning_rate": 0.001,
+                                "yColumn": selected_y_column,
+                                "use_forward_backward": True
+                            },
+                            df=df,
+                            save_path=f"models/checkpoints"
+                        )
+                    imputer.fit()
+                    imputed_df = imputer.impute()
                 else:
                     imputer.fit(df.copy())
                     imputed_df = imputer.transform(df)
@@ -1014,8 +1123,35 @@ async def get_arima_diagnostics(dataset_id: str, column: Optional[str] = None):
         )
 
 
+@app.get("/gb_histogram/{dataset_id}")
+async def get_gb_histogram(dataset_id: str, yColumn: Optional[str] = None):
+    """
+    Generate a histogram of the xgboost model target column values to find outliers.
+    Args:
+        dataset_id: ID of the dataset to analyze
+        column: The column to analyze
+    Returns:
+        Dictionary containing base64 encoded plot images
+    """
+    if dataset_id not in preprocessed_data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    df = preprocessed_data[dataset_id]["data"].copy()
+
+    from models import GradientBoostingImputationModel
+    model = GradientBoostingImputationModel()
+
+    try:
+        plots = model.generate_histogram(df, yColumn)
+        return plots
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error generating histogram: {str(e)}"
+        )
+
+
 # ---------------------------
-# Run the API using uvicorn if executed as a script.
+# Run using uvicorn
 # ---------------------------
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
