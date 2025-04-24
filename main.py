@@ -16,12 +16,12 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 from selection import extract_features, ImputationModelSelector
 from models import (
     LinearInterpolationModel,
-    SplineImputationModel,
-    ExponentialSmoothingModel,
+    # SplineImputationModel,
+    # ExponentialSmoothingModel,
     ARIMAImputationModel,
-    KNNImputationModel,
-    RegressionImputationModel,
-    MICEImputationModel,
+    # KNNImputationModel,
+    # RegressionImputationModel,
+    # MICEImputationModel,
     GradientBoostingImputationModel,
     LSTMImputationModel,
 )
@@ -494,6 +494,7 @@ async def impute_dataset(request: ImputeRequest):
     Impute the missing values in the dataset using the selected model.
     For ARIMA models, additional parameters can be provided.
     """
+    print(f"[IMPUTE] Request: {request}")
     dataset_id = request.dataset_id
     selected_model = request.selected_model
     model_params = request.model_params
@@ -510,8 +511,7 @@ async def impute_dataset(request: ImputeRequest):
     print(f"Imputing with model: {selected_model}")
     def get_model_by_name(model_name: str):
         model_mapping = {
-            # "linear_interpolation": LinearInterpolationModel(),
-            # "spline_interpolation": SplineImputationModel(),
+            "linear_interpolation": LinearInterpolationModel(),
             "mean_imputation": lambda df: df.fillna(df.mean()),
             # "knn_imputation": KNNImputationModel(),
             # "regression_imputation": RegressionImputationModel(),
@@ -535,7 +535,10 @@ async def impute_dataset(request: ImputeRequest):
         imputed_data = imputer(df)
     else:
         try:
-            if imputer.__class__.__name__ == "ARIMAImputationModel" and model_params:
+            if imputer.__class__.__name__ == "LinearInterpolationModel":
+                imputed_data = imputer.impute(df)
+
+            elif imputer.__class__.__name__ == "ARIMAImputationModel" and model_params:
                 order = tuple(model_params.get("order", (1, 1, 1)))
                 seasonal_order = tuple(model_params.get("seasonal_order", (1, 1, 1, 1)))
                 y_column = model_params.get("y_column", None)
@@ -548,6 +551,7 @@ async def impute_dataset(request: ImputeRequest):
                     seasonality=hasSeasonality
                 )
                 imputed_data = imputer.transform(df)
+
             elif imputer.__class__.__name__ == "GradientBoostingImputationModel":
                 imputer = GradientBoostingImputationModel(
                     {
@@ -569,8 +573,15 @@ async def impute_dataset(request: ImputeRequest):
                 )
                 imputer.fit(df)
                 imputed_data = imputer.impute(df)
+
             elif imputer.__class__.__name__ == "LSTMImputationModel":
-                if model_params:
+                if not y_column:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="[Impute API | LSTM] y_column parameter is required for LSTM imputation"
+                    )
+                try:
+                    # Initialize model with proper parameters
                     imputer = LSTMImputationModel(
                         params={
                             "epochs": 10,
@@ -582,15 +593,27 @@ async def impute_dataset(request: ImputeRequest):
                         df=df,
                         save_path=f"models/checkpoints"
                     )
-                imputer.fit()
-                imputed_data = imputer.impute()
+                    # Fit the model
+                    print(f"[Impute API | LSTM] Fitting model for column: {y_column}")
+                    imputer.fit()
+
+                    # Perform imputation
+                    print(f"[Impute API | LSTM] Imputing data")
+                    imputed_data = imputer.impute(only_missing_dates=True)
+
+                except Exception as e:
+                    print(f"[Impute API | LSTM] Error during imputation: {str(e)}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"[Impute API | LSTM] Error during LSTM imputation: {str(e)}"
+                    )
             else:
                 train_df = df.copy()
                 imputer.fit(train_df)
                 imputed_data = imputer.transform(df)
         except Exception as e:
             print(
-                f"{datetime.now()} - Error using {selected_model}: {str(e)}. Falling back to basic imputation."
+                f"[Impute API | LSTM] Error using {selected_model}: {str(e)}. Falling back to basic imputation."
             )
             imputed_data = df.fillna(method="ffill").fillna(method="bfill")
 
@@ -721,13 +744,13 @@ async def impute_dataset(request: ImputeRequest):
             }
         else:
             evaluation_metrics = {
-                "rmse": "Failed",
-                "mae": "Failed",
+                "rmse": "N/A",
+                "mae": "N/A",
                 "success": False
             }
     except Exception as e:
         print(f"{datetime.now()} - Error during evaluation: {str(e)}")
-        evaluation_metrics = {"rmse": "Failed", "mae": "Failed", "success": False}
+        evaluation_metrics = {"rmse": "N/A", "mae": "N/A", "success": False}
 
     model_performance_records[dataset_id] = {
         **evaluation_metrics,
@@ -751,6 +774,7 @@ async def get_imputed_dataset(request: ImputeRequest):
     Retrieve the imputed dataset for visualization with both original and imputed values.
     Similar to the /dataset endpoint but returns both original and imputed values for comparison.
     """
+    print(f"[GET IMPUTED DATASET] Request: {request}")
     dataset_id = request.dataset_id
     selected_model = request.selected_model
     selected_y_column = request.selected_y_column
@@ -759,12 +783,13 @@ async def get_imputed_dataset(request: ImputeRequest):
     if dataset_id not in preprocessed_data:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    if dataset_id not in model_performance_records:
-        raise HTTPException(
-            status_code=404,
-            detail="This dataset has not been imputed yet. Please run imputation first.",
-        )
+    # if dataset_id not in model_performance_records:
+    #     raise HTTPException(
+    #         status_code=404,
+    #         detail="This dataset has not been imputed yet. Please run imputation first.",
+    #     )
 
+    # df = pd.read_csv("datasets/btc.csv")
     df = preprocessed_data[dataset_id]["data"].copy()
 
     selected_model = selected_model if selected_model else model_performance_records.get(dataset_id, {}).get("selected_model")
@@ -775,15 +800,13 @@ async def get_imputed_dataset(request: ImputeRequest):
         def get_model_by_name(model_name: str):
             model_mapping = {
                 "linear_interpolation": LinearInterpolationModel(),
-                "spline_interpolation": SplineImputationModel(),
-                "mean_imputation": lambda df: df.fillna(df.mean()),
-                "knn_imputation": KNNImputationModel(),
-                "regression_imputation": RegressionImputationModel(),
-                "mice_imputation": MICEImputationModel(),
+                # "mean_imputation": lambda df: df.fillna(df.mean()),
+                # "knn_imputation": KNNImputationModel(),
+                # "regression_imputation": RegressionImputationModel(),
                 "arima_imputation": ARIMAImputationModel(),
                 "gb_imputation": GradientBoostingImputationModel(),
-                "lstm_imputation": None,
-                "exponential_smoothing": ExponentialSmoothingModel()
+                "lstm_imputation": LSTMImputationModel(),
+                # "exponential_smoothing": ExponentialSmoothingModel()
             }
             return model_mapping.get(model_name.lower())
 
@@ -814,6 +837,7 @@ async def get_imputed_dataset(request: ImputeRequest):
                         seasonality=hasSeasonality,
                     )
                     imputed_df = imputer.transform(df)
+
                 elif imputer.__class__.__name__ == "GradientBoostingImputationModel":
                     y_column = selected_y_column if selected_y_column else None
                     imputer = GradientBoostingImputationModel(
@@ -833,8 +857,15 @@ async def get_imputed_dataset(request: ImputeRequest):
                     )
                     imputer.fit(df)
                     imputed_df = imputer.impute(df)
+
                 elif imputer.__class__.__name__ == "LSTMImputationModel":
-                    if model_params:
+                    if not selected_y_column:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="selected_y_column parameter is required for LSTM imputation"
+                        )
+                    try:
+                        print(f"[Impute Dataset API | LSTM] Initializing model for column: {selected_y_column}")
                         imputer = LSTMImputationModel(
                             params={
                                 "epochs": 10,
@@ -846,18 +877,25 @@ async def get_imputed_dataset(request: ImputeRequest):
                             df=df,
                             save_path=f"models/checkpoints"
                         )
-                    imputer.fit()
-                    imputed_df = imputer.impute()
+                        imputer.fit()
+                        imputed_df = imputer.impute()
+
+                    except Exception as e:
+                        print(f"[Impute Dataset API | LSTM] Error during imputation: {str(e)}")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"[Impute Dataset API | LSTM] Error during LSTM imputation: {str(e)}"
+                        )
                 else:
                     imputer.fit(df.copy())
                     imputed_df = imputer.transform(df)
             except Exception as e:
                 print(
-                    f"{datetime.now()} - Error using {selected_model}: {str(e)}. Falling back to basic imputation."
+                    f"[Impute Dataset API | LSTM] Error using {selected_model}: {str(e)}. Falling back to basic imputation."
                 )
                 imputed_df = df.fillna(method="ffill").fillna(method="bfill") # type: ignore
     except Exception as e:
-        print(f"{datetime.now()} - Error during imputation retrieval: {str(e)}")
+        print(f"[Impute Dataset API | LSTM] Error during imputation retrieval: {str(e)}")
         imputed_df = df.fillna(method="ffill").fillna(method="bfill") # type: ignore
 
     y_column = selected_y_column if selected_y_column else model_params.get("y_column", None) if model_params else None

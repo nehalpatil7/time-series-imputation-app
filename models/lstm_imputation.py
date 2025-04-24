@@ -15,6 +15,7 @@ from tensorflow.keras.layers import ( # type: ignore
 from tensorflow.keras.callbacks import EarlyStopping # type: ignore
 from tensorflow.keras.optimizers import Adam # type: ignore
 from tensorflow.keras.models import save_model, load_model # type: ignore
+from tensorflow.keras.losses import MeanSquaredError # type: ignore
 from sklearn.preprocessing import StandardScaler
 
 class LSTMImputationModel:
@@ -39,15 +40,16 @@ class LSTMImputationModel:
         self.model = None
         self.scaler = None
         self.save_path = save_path or "models/checkpoints"
-        if self.save_path:
-            fwd_path = os.path.join(self.save_path, "model_forward.h5")
-            bwd_path = os.path.join(self.save_path, "model_backward.h5")
-            if os.path.isfile(fwd_path) and os.path.isfile(bwd_path):
-                self.model_forward = load_model(fwd_path)
-                self.model_backward = load_model(bwd_path)
-                print(f"Loaded models from {self.save_path}")
-            else:
-                os.makedirs(self.save_path, exist_ok=True)
+        # if self.save_path:
+        #     print(f"[LSTMImputationModel | __init__] Loading models from {self.save_path}")
+        #     fwd_path = os.path.join(self.save_path, "model_forward.h5")
+        #     bwd_path = os.path.join(self.save_path, "model_backward.h5")
+        #     if os.path.isfile(fwd_path) and os.path.isfile(bwd_path):
+        #         self.model_forward = self.load_models(fwd_path)
+        #         self.model_backward = self.load_models(bwd_path)
+        #         print(f"[LSTMImputationModel | __init__] Loaded models from {self.save_path}")
+        #     else:
+        #         os.makedirs(self.save_path, exist_ok=True)
 
     def extract_number(self, val):
         match = re.search(r"[-+]?\d*\.\d+|\d+", str(val))
@@ -61,36 +63,39 @@ class LSTMImputationModel:
         save_model(
             self.model_backward, backward_path, overwrite=True, include_optimizer=True
         )
+        print(f"[LSTMImputationModel | save_models] Saved models to {forward_path} and {backward_path}")
 
-    def load_models(
-        self, forward_path: Optional[str] = None, backward_path: Optional[str] = None
-    ):
-        """
-        Load models from disk. If no paths are given, will use save_dir defaults.
-        """
-        if forward_path is None or backward_path is None:
-            if not self.save_path:
-                raise ValueError("No save_path specified and no explicit paths given")
-            forward_path = forward_path or os.path.join(
-                self.save_path, "model_forward.h5"
-            )
-            backward_path = backward_path or os.path.join(
-                self.save_path, "model_backward.h5"
-            )
+    # def load_models(
+    #     self, forward_path: Optional[str] = None, backward_path: Optional[str] = None
+    # ):
+    #     """
+    #     Load models from disk. If no paths are given, will use save_dir defaults.
+    #     """
+    #     if forward_path is None or backward_path is None:
+    #         if not self.save_path:
+    #             raise ValueError("No save_path specified and no explicit paths given")
+    #         forward_path = forward_path or os.path.join(
+    #             self.save_path, "model_forward.h5"
+    #         )
+    #         backward_path = backward_path or os.path.join(
+    #             self.save_path, "model_backward.h5"
+    #         )
 
-        if os.path.isfile(forward_path):
-            self.model_forward = load_model(forward_path)
-        else:
-            print(f"No forward model at {forward_path}")
+    #     custom_objs = {"mse": MeanSquaredError()}
 
-        if os.path.isfile(backward_path):
-            self.model_backward = load_model(backward_path)
-        else:
-            print(f"No backward model at {backward_path}")
+    #     if os.path.isfile(forward_path):
+    #         self.model_forward = load_model(forward_path, custom_objects=custom_objs)
+    #     else:
+    #         print(f"No forward model at {forward_path}")
 
-        print(
-            f"Models loaded:\n forward -> {forward_path}\n backward -> {backward_path}"
-        )
+    #     if os.path.isfile(backward_path):
+    #         self.model_backward = load_model(backward_path, custom_objects=custom_objs)
+    #     else:
+    #         print(f"No backward model at {backward_path}")
+
+    #     print(
+    #         f"[LSTMImputationModel | load_models] Loaded models:\n forward -> {forward_path}\n backward -> {backward_path}"
+    #     )
 
     def prepare_sequences(self, df):
         """
@@ -122,7 +127,7 @@ class LSTMImputationModel:
         """
         try:
             if self.df is None:
-                raise ValueError("Model must be fitted before transformation")
+                raise ValueError("[LSTMImputationModel | preprocess_data] Model must be fitted before transformation")
 
             df = self.df.copy()
             df["Date"] = pd.to_datetime(df["Date"])
@@ -136,13 +141,13 @@ class LSTMImputationModel:
             # Get null indices in the target column
             y_column = self.params["yColumn"]
             if y_column not in self.df.columns:
-                raise ValueError(f"Target column {y_column} not found in DataFrame")
+                raise ValueError(f"[LSTMImputationModel | preprocess_data] Target column {y_column} not found in DataFrame")
 
             mask = df[y_column].isnull().to_numpy()
             missing_locations = df.loc[mask].copy()
             missing_values = missing_locations.shape[0]
             if missing_values == 0:
-                raise ValueError("No null values found in the target column")
+                raise ValueError("[LSTMImputationModel | preprocess_data] No null values found in the target column")
 
             first_null_idx = missing_locations.index[0]
             last_null_idx = missing_locations.index[-1]
@@ -177,7 +182,7 @@ class LSTMImputationModel:
 
             return forward_trainX, forward_trainY, backward_trainX, backward_trainY
         except Exception as e:
-            raise ValueError(f"Error in preprocess_data: {e}")
+            raise ValueError(f"[LSTMImputationModel | preprocess_data] Error in preprocess_data: {e}")
 
     def fit(self) -> None:
         """
@@ -205,14 +210,14 @@ class LSTMImputationModel:
         self.model_forward.add(Dropout(self.params["dropout_rate"]))
         self.model_forward.add(Dense(forward_trainY.shape[1]))
         self.model_forward.compile(optimizer=opt_fwd, loss='mse')
-        print(self.model_forward.summary())
         self.model_forward.fit(
             forward_trainX,
             forward_trainY,
             epochs=self.params["epochs"],
             batch_size=16,
             callbacks=[EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)],
-            validation_split=0.1
+            validation_split=0.1,
+            verbose=0
         )
 
         # Build the backward model
@@ -222,27 +227,27 @@ class LSTMImputationModel:
         self.model_backward.add(Dropout(self.params["dropout_rate"]))
         self.model_backward.add(Dense(backward_trainY.shape[1]))
         self.model_backward.compile(optimizer=opt_bwd, loss="mse", run_eagerly=True)
-        print(self.model_backward.summary())
         self.model_backward.fit(
             backward_trainX,
             backward_trainY,
             epochs=self.params["epochs"],
             batch_size=16,
             callbacks=[EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)],
-            validation_split=0.1
+            validation_split=0.1,
+            verbose=0
         )
 
-        os.makedirs(self.save_path, exist_ok=True)
-        self.save_models(os.path.join(self.save_path, "model_forward.h5"), os.path.join(self.save_path, "model_backward.h5"))
+        # os.makedirs(self.save_path, exist_ok=True)
+        # self.save_models(os.path.join(self.save_path, "model_forward.h5"), os.path.join(self.save_path, "model_backward.h5"))
 
-    def impute(self) -> pd.DataFrame:
+    def impute(self, only_missing_dates: bool = False) -> pd.DataFrame:
         """
         Impute missing values using the trained LSTM model.
         Returns:
             DataFrame with imputed values
         """
         if self.df is None:
-            raise ValueError("Model must be fitted before prediction")
+            raise ValueError("[LSTMImputationModel | impute] Model must be fitted before prediction")
 
         us_bd = CustomBusinessDay(calendar=USFederalHolidayCalendar())
         df = self.df.copy()
@@ -251,7 +256,7 @@ class LSTMImputationModel:
         y_col = self.params["yColumn"]
 
         mask = df[y_col].isnull()
-        missing_locations = df.loc[mask].copy()
+        missing_locations = df.index[mask]
         M = len(missing_locations)
 
         if y_col in ["price", "Open", "High", "Low", "Close"]:
@@ -273,23 +278,32 @@ class LSTMImputationModel:
 
         # Inverse transform predictions
         if self.scaler is None:
-            raise ValueError("Scaler not found. Please fit the model first.")
+            raise ValueError("[LSTMImputationModel | impute] Scaler not found. Please fit the model first.")
         fwd_yScaled = fwd_pred[:, -1, 0].reshape(-1, 1)
         fwd_yPred = self.scaler.inverse_transform(fwd_yScaled).flatten() # type: ignore
+        preds = pd.DataFrame({"fwd_yPred": pd.Series(fwd_yPred)}, index=missing_dates)
 
         bwd_yScaled = bwd_pred[:, -1, 0].reshape(-1, 1)
         bwd_yPred = self.scaler.inverse_transform(bwd_yScaled).flatten()[::-1] # type: ignore
+        preds = preds.assign(bwd_yPred=pd.Series(bwd_yPred[::-1]))
+        preds.to_csv("preds.csv")
 
         # Create DataFrame with imputed values
         imputed_values = (fwd_yPred + bwd_yPred) / 2
-        df_imputed = pd.DataFrame({
-            "Date": missing_dates,
+        missing_df = pd.DataFrame({
+            'Date': missing_dates,
             y_col: imputed_values
-        })
-        df.loc[missing_dates, y_col] = df_imputed[y_col].values
+        }).set_index('Date')
+
+        if only_missing_dates:
+            missing_df = missing_df.reindex(missing_locations).bfill().ffill()
+            return missing_df.reset_index()
+
+        df.loc[missing_dates, y_col] = imputed_values
+        df = df.bfill().ffill()
         return df.reset_index()
 
 df = pd.read_csv("/Users/npatil14/Downloads/IITC/Assignments/CS-597/regenSystem/datasets/btc.csv")
-model = LSTMImputationModel({"yColumn": "price", "epochs": 1, "dropout_rate": 0.2, "learning_rate": 0.1}, df=df)
+model = LSTMImputationModel({"yColumn": "price", "epochs": 10, "dropout_rate": 0.2, "learning_rate": 0.01}, df=df)
 model.fit()
-model.impute()
+result = model.impute()

@@ -364,7 +364,7 @@ const App = () => {
             // Update the analysis results with actual metrics from imputation
             setAnalysisResult({
                 selectedModel: selectedModel,
-                metrics: imputeResponse.evaluation_metrics
+                metrics: imputeResponse.evaluation_metrics || { note: "Click 'Impute' to run the model and generate metrics" }
             });
 
             // Step 2: Get the imputed dataset for visualization

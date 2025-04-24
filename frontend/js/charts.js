@@ -263,7 +263,7 @@ const createImputedDataChart = (chartElement, imputedData, ycolumn) => {
                     width: 2
                 },
                 hoverinfo: segment.missing ? 'x+text' : 'x+y',
-                hovertext: segment.missing ? Array(segment.x.length).fill('Imputed Value') : undefined
+                hovertext: segment.missing ? Array(segment.x.length).fill(imputedPoints) : undefined
             };
         });
 
