@@ -161,7 +161,7 @@ const getGBHistogram = async (datasetId, column) => {
     let url = `${apiBaseUrl}/gb_histogram/${datasetId}`;
 
     if (column) {
-        url += `?column=${column}`;
+        url += `?yColumn=${column}`;
     }
 
     const response = await axios.get(url);

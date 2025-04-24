@@ -62,6 +62,10 @@ const App = () => {
     const [arimaDiagnostics, setArimaDiagnostics] = useState(null);
     const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
 
+    // New state for gradient boosting histogram
+    const [gbHistogram, setGbHistogram] = useState(null);
+    const [loadingGbHistogram, setLoadingGbHistogram] = useState(false);
+
     // New state to control showing override options
     const [showingPlot, setShowingPlot] = useState(false);
 
@@ -72,12 +76,15 @@ const App = () => {
     const imputedChartRef = useRef(null);
     const fileInputRef = useRef(null);
 
-    // Effect to load diagnostics when ARIMA is selected
+    // Effect to load diagnostics when ARIMA or Gradient Boosting is selected
     useEffect(() => {
         if (overrideModel === 'arima_imputation' || analysisResult?.selectedModel === 'arima_imputation') {
             loadArimaDiagnostics();
+        } else if (overrideModel === 'gb_imputation' || analysisResult?.selectedModel === 'gb_imputation') {
+            loadGbHistogram();
         } else {
             setArimaDiagnostics(null);
+            setGbHistogram(null);
         }
     }, [overrideModel, analysisResult?.selectedModel, datasetId, selectedYColumn]);
 
@@ -345,8 +352,8 @@ const App = () => {
         }
     };
 
-    const displayImputedData = async (datasetId, yColumn) => {
-        if (!datasetId || !yColumn || !selectedModel) return;
+    const displayImputedData = async (datasetId) => {
+        if (!datasetId || !selectedModel) return;
 
         setIsLoading(true);
         setError('');
@@ -374,7 +381,7 @@ const App = () => {
             setImputedData(imputedDataResponse);
 
             // Display imputed data on the dedicated imputed chart
-            createImputedDataChart(imputedChartRef.current, imputedDataResponse, yColumn);
+            createImputedDataChart(imputedChartRef.current, imputedDataResponse);
 
             // Set flag indicating imputation is complete
             setIsImputed(true);
@@ -400,6 +407,22 @@ const App = () => {
             setError('Failed to load ARIMA diagnostic plots');
         } finally {
             setLoadingDiagnostics(false);
+        }
+    };
+
+    // Load Gradient Boosting histogram
+    const loadGbHistogram = async () => {
+        if (!datasetId || !selectedYColumn) return;
+
+        setLoadingGbHistogram(true);
+        try {
+            const histogram = await api.getGBHistogram(datasetId, selectedYColumn);
+            setGbHistogram(histogram);
+        } catch (error) {
+            console.error('Error loading gradient boosting histogram:', error);
+            setError('Failed to load gradient boosting histogram');
+        } finally {
+            setLoadingGbHistogram(false);
         }
     };
 
@@ -859,12 +882,40 @@ const App = () => {
                         )}
                     </div>
 
+                    {/* Gradient Boosting Histogram */}
+                    {((analysisResult?.selectedModel === 'gb_imputation') && !overrideModel) || overrideModel === 'gb_imputation' ? (
+                        <div className="gb-histogram" style={{ marginTop: '15px', marginBottom: '15px' }}>
+                            <h4>Gradient Boosting Histogram</h4>
+                            <p className="feature-note">This histogram helps identify the distribution of values in the target column</p>
+
+                            {loadingGbHistogram && <div className="spinner"></div>}
+
+                            {gbHistogram && !loadingGbHistogram && (
+                                <div className="histogram-container">
+                                    {gbHistogram.error && (
+                                        <p className="error-message">{gbHistogram.error}</p>
+                                    )}
+
+                                    {gbHistogram.histogram && (
+                                        <div className="plot-container">
+                                            <img
+                                                src={`data:image/png;base64,${gbHistogram.histogram}`}
+                                                alt="Gradient Boosting Histogram"
+                                                style={{ width: '100%', maxWidth: '700px' }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    ) : null}
+
                     <h4>Imputation:</h4>
                     <p className="step-instruction">Click "Impute" to apply the selected model and generate missing values</p>
                     <div className="button-group">
                         <button
                             className="analyze-btn inline-btn"
-                            onClick={() => displayImputedData(datasetId, selectedYColumn)}
+                            onClick={() => displayImputedData(datasetId)}
                             style={{ marginRight: '10px' }}
                             disabled={isLoading ||
                                 (selectedModel === 'arima_imputation' && !areArimaParamsValid())}

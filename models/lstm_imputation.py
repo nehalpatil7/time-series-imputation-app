@@ -281,15 +281,13 @@ class LSTMImputationModel:
             raise ValueError("[LSTMImputationModel | impute] Scaler not found. Please fit the model first.")
         fwd_yScaled = fwd_pred[:, -1, 0].reshape(-1, 1)
         fwd_yPred = self.scaler.inverse_transform(fwd_yScaled).flatten() # type: ignore
-        preds = pd.DataFrame({"fwd_yPred": pd.Series(fwd_yPred)}, index=missing_dates)
 
         bwd_yScaled = bwd_pred[:, -1, 0].reshape(-1, 1)
-        bwd_yPred = self.scaler.inverse_transform(bwd_yScaled).flatten()[::-1] # type: ignore
-        preds = preds.assign(bwd_yPred=pd.Series(bwd_yPred[::-1]))
-        preds.to_csv("preds.csv")
+        bwd_yPred = self.scaler.inverse_transform(bwd_yScaled).flatten() # type: ignore
+
 
         # Create DataFrame with imputed values
-        imputed_values = (fwd_yPred + bwd_yPred) / 2
+        imputed_values = ((fwd_yPred + bwd_yPred) / 2)[::-1]
         missing_df = pd.DataFrame({
             'Date': missing_dates,
             y_col: imputed_values
@@ -303,7 +301,7 @@ class LSTMImputationModel:
         df = df.bfill().ffill()
         return df.reset_index()
 
-df = pd.read_csv("/Users/npatil14/Downloads/IITC/Assignments/CS-597/regenSystem/datasets/btc.csv")
-model = LSTMImputationModel({"yColumn": "price", "epochs": 10, "dropout_rate": 0.2, "learning_rate": 0.01}, df=df)
-model.fit()
-result = model.impute()
+# df = pd.read_csv("/Users/npatil14/Downloads/IITC/Assignments/CS-597/regenSystem/datasets/btc.csv")
+# model = LSTMImputationModel({"yColumn": "price", "epochs": 1, "dropout_rate": 0.2, "learning_rate": 0.01}, df=df)
+# model.fit()
+# result = model.impute()

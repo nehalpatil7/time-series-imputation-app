@@ -150,7 +150,7 @@ const createTimeSeriesChart = (chartElement, dataResponse) => {
 };
 
 // Create a chart for imputed data showing original and imputed values
-const createImputedDataChart = (chartElement, imputedData, ycolumn) => {
+const createImputedDataChart = (chartElement, imputedData) => {
     if (!chartElement) return;
 
     Plotly.purge(chartElement);
@@ -158,9 +158,6 @@ const createImputedDataChart = (chartElement, imputedData, ycolumn) => {
     if (!imputedData) return;
 
     try {
-        const originalPoints = [];
-        const imputedPoints = [];
-        const missingPoints = [];
 
         let firstMissingIndex = -1;
         let lastMissingIndex = -1;
@@ -263,7 +260,7 @@ const createImputedDataChart = (chartElement, imputedData, ycolumn) => {
                     width: 2
                 },
                 hoverinfo: segment.missing ? 'x+text' : 'x+y',
-                hovertext: segment.missing ? Array(segment.x.length).fill(imputedPoints) : undefined
+                hovertext: segment.missing ? segment.y.map(y => y.toFixed(2)) : undefined
             };
         });
 
