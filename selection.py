@@ -214,11 +214,9 @@ class ImputationModelSelector:
         # Updated list focusing on imputation models
         self.candidate_models = candidate_models or [
             "linear_interpolation",
-            "spline_interpolation",
             "mean_imputation",
             "knn_imputation",
             "regression_imputation",
-            "mice_imputation",
             "arima_imputation",
             "gb_imputation",
             "lstm_imputation",
@@ -294,56 +292,46 @@ class ImputationModelSelector:
 
         # --- Rule Logic ---
 
-        # Rule 1: Very low missing rate - simple methods often suffice
-        if missing_rate < 0.05 and "linear_interpolation" in available:
+        # Rule 1: Very low missing rate - simple method suffice
+        if missing_rate < 0.02 and "linear_interpolation" in available:
             return "linear_interpolation"
 
-        # Rule 2: Data with Trend and Seasonality
+        # Rule 2: Data with Trend & Seasonality
         if has_trend and has_seasonality:
-            if length > 500 and "lstm_imputation" in available:
-                return "lstm_imputation"  # Good for long, complex patterns
+            if length > 1000 and missing_rate > 0.8 and "lstm_imputation" in available:
+                return "lstm_imputation"                    # Good for long, complex patterns
             elif "arima_imputation" in available:
-                return "arima_imputation"  # Captures time dependencies
-            elif "spline_interpolation" in available:
-                return "spline_interpolation"  # Can handle curves better than linear
+                return "arima_imputation"                   # Captures time dependencies
 
         # Rule 3: Data with only Trend
         elif has_trend and not has_seasonality:
             if "arima_imputation" in available:
-                return "arima_imputation"  # ARIMA handles trend well
-            elif "regression_imputation" in available:
-                return "regression_imputation"  # Can model trend explicitly
+                return "arima_imputation"                   # ARIMA handles trend well
             elif "linear_interpolation" in available:
-                return "linear_interpolation"  # Simple for trend if gaps small
+                return "linear_interpolation"               # Simple for trend if gaps small
 
         # Rule 4: Data with only Seasonality
         elif not has_trend and has_seasonality:
             if "arima_imputation" in available:
-                return "arima_imputation"  # Seasonal ARIMA part
-            elif "spline_interpolation" in available:
-                return "spline_interpolation"  # Can capture periodic shapes
+                return "arima_imputation"                   # Seasonal ARIMA part
             elif "knn_imputation" in available:
-                return "knn_imputation"  # Might capture local seasonal patterns
+                return "knn_imputation"                     # Might capture local seasonal patterns
 
         # Rule 5: Data with neither Trend nor Seasonality (or stationary)
         elif not has_trend and not has_seasonality:
-            if missing_rate > 0.2 and "mice_imputation" in available:
-                return "mice_imputation"  # Good for complex missingness, multivariate
-            elif "knn_imputation" in available:
-                return "knn_imputation"  # Good general purpose
+            if "knn_imputation" in available:
+                return "knn_imputation"                     # Good general purpose
             elif "mean_imputation" in available:
-                return "mean_imputation"  # Simple baseline
+                return "mean_imputation"                    # Simple baseline
 
         # Rule 6: High missing rate - favor robust methods
         if missing_rate > 0.3:
-            if "mice_imputation" in available:
-                return "mice_imputation"
-            elif "knn_imputation" in available:
+            if "knn_imputation" in available:
                 return "knn_imputation"
-            elif "gb_imputation" in available:  # Boosting can handle complex relations
+            elif "gb_imputation" in available:              # Boosting can handle complex relations
                 return "gb_imputation"
 
-        # Rule 7: Very long sequences - consider advanced methods
+        # Rule 7: Very long sequences
         if length > 1000:
             if "lstm_imputation" in available:
                 return "lstm_imputation"
@@ -352,11 +340,11 @@ class ImputationModelSelector:
 
         # Default Fallback (if no specific rules match strongly)
         if "knn_imputation" in available:
-            return "knn_imputation"  # Often a reasonable default
+            return "knn_imputation"                         # Often a reasonable default
         elif "linear_interpolation" in available:
             return "linear_interpolation"
         else:
-            return self.candidate_models[0]  # Absolute fallback
+            return self.candidate_models[0]                 # Absolute fallback
 
     def predict(self, features: dict) -> str:
         """

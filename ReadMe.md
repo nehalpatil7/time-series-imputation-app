@@ -60,12 +60,9 @@ imputation_app/
 ├── models/                                  # Model implementations
 │   ├── __init__.py
 │   ├── linear_interpolation.py
-│   ├── spline_interpolation.py
 │   ├── exponential_smoothing.py
 │   ├── arima_imputation.py
 │   └── knn_imputation.py
-│   └── regression_imputation.py
-│   └── mice_imputation.py
 │   └── gradient_boosting_imputation.py
 │   └── custom_llm_imputation.py
 ├── selection.py                             # Model selection logic (lookup matrix + decision tree)

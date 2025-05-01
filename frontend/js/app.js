@@ -8,11 +8,8 @@ const api = TimeSeriesApi;
 const candidateModels = [
     { value: '', label: 'Auto (recommended)' },
     { value: 'linear_interpolation', label: 'Linear Interpolation' },
-    { value: 'spline_interpolation', label: 'Spline Interpolation' },
     { value: 'mean_imputation', label: 'Mean Imputation' },
     { value: 'knn_imputation', label: 'KNN Imputation' },
-    { value: 'regression_imputation', label: 'Regression Imputation' },
-    { value: 'mice_imputation', label: 'MICE Imputation' },
     { value: 'arima_imputation', label: 'ARIMA Imputation' },
     { value: 'gb_imputation', label: 'Gradient Boosting Imputation' },
     { value: 'lstm_imputation', label: 'LSTM Imputation' }
@@ -57,6 +54,7 @@ const App = () => {
     // New state for ARIMA parameters
     const [arimaParams, setArimaParams] = useState({ ...defaultArimaParams, y_column: selectedYColumn });
     const [showArimaParams, setShowArimaParams] = useState(false);
+    const [linearInterpolationMethod, setLinearInterpolationMethod] = useState('linear');
 
     // New state for ARIMA diagnostic plots
     const [arimaDiagnostics, setArimaDiagnostics] = useState(null);
@@ -359,13 +357,20 @@ const App = () => {
         setError('');
 
         try {
+            // Prepare model parameters based on the selected model
+            let modelParams = null;
+            if (selectedModel === 'arima_imputation') {
+                modelParams = { ...arimaParams, y_column: arimaParams.y_column || selectedYColumn, hasSeasonality: hasSeasonality };
+            } else if (selectedModel === 'linear_interpolation') {
+                modelParams = { method: linearInterpolationMethod };
+            }
+
             // Step 1: Call the impute endpoint to actually perform imputation
-            // Pass ARIMA parameters if the model is ARIMA
             const imputeResponse = await api.imputeDataset(
                 datasetId,
                 selectedModel,
                 selectedYColumn,
-                selectedModel === 'arima_imputation' ? { ...arimaParams, y_column: arimaParams.y_column || selectedYColumn, hasSeasonality: hasSeasonality } : null,
+                modelParams
             );
 
             // Update the analysis results with actual metrics from imputation
@@ -375,7 +380,12 @@ const App = () => {
             });
 
             // Step 2: Get the imputed dataset for visualization
-            const imputedDataResponse = await api.getImputedDataset(datasetId, selectedModel, selectedYColumn, selectedModel === 'arima_imputation' ? { ...arimaParams, y_column: arimaParams.y_column || selectedYColumn } : null);
+            const imputedDataResponse = await api.getImputedDataset(
+                datasetId,
+                selectedModel,
+                selectedYColumn,
+                modelParams
+            );
 
             // Store the imputed data in state
             setImputedData(imputedDataResponse);
@@ -637,7 +647,7 @@ const App = () => {
                     {/* Model override options - now placed between model info and imputation */}
                     <div className="model-override-section" style={{ marginTop: '20px', marginBottom: '20px' }}>
                         <h4>Model Override Options:</h4>
-                        <div className="controls">
+                        <div className="controls" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                             <div className="control-group">
                                 <label htmlFor="model">Select Model:</label>
                                 <select
@@ -657,6 +667,154 @@ const App = () => {
                                     ))}
                                 </select>
                             </div>
+
+                            {/* Linear Interpolation Method Selection */}
+                            {((analysisResult?.selectedModel === 'linear_interpolation') && !overrideModel) || overrideModel === 'linear_interpolation' && (
+                                <div className="control-group">
+                                    <label htmlFor="linear-method">Interpolation Method:</label>
+                                    <select
+                                        id="linear-method"
+                                        value={linearInterpolationMethod}
+                                        onChange={(e) => setLinearInterpolationMethod(e.target.value)}
+                                    >
+                                        <option value="linear">Linear (default)</option>
+                                        <option value="time">Time-based</option>
+                                        <option value="index">Index-based</option>
+                                        <option value="values">Values-based</option>
+                                        <option value="pad">Forward Fill (pad)</option>
+                                        <option value="nearest">Nearest</option>
+                                        <option value="zero">Zero-order</option>
+                                        <option value="slinear">Spline Linear</option>
+                                        <option value="quadratic">Quadratic</option>
+                                        <option value="cubic">Cubic</option>
+                                        <option value="barycentric">Barycentric</option>
+                                        <option value="polynomial">Polynomial</option>
+                                        <option value="spline">Spline</option>
+                                        <option value="krogh">Krogh</option>
+                                        <option value="piecewise_polynomial">Piecewise Polynomial</option>
+                                        <option value="pchip">PCHIP</option>
+                                        <option value="akima">Akima</option>
+                                        <option value="cubicspline">Cubic Spline</option>
+                                        <option value="from_derivatives">From Derivatives</option>
+                                    </select>
+                                    <p className="feature-note" style={{ marginTop: '5px' }}>
+                                        {linearInterpolationMethod === 'linear' && (
+                                            <>
+                                                Treats values as equally spaced; ignores actual index values.
+                                                <span className="interpolation-formula">y = y₁ + (x - x₁) * (y₂ - y₁) / (x₂ - x₁)</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'time' && (
+                                            <>
+                                                Interpolates based on actual datetime index spacing.
+                                                <span className="interpolation-formula">y = y₁ + (t - t₁) * (y₂ - y₁) / (t₂ - t₁) where t is time</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'index' && (
+                                            <>
+                                                Uses the numerical values of the index as x-coordinates for linear interpolation.
+                                                <span className="interpolation-formula">y = y₁ + (i - i₁) * (y₂ - y₁) / (i₂ - i₁) where i is index</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'values' && (
+                                            <>
+                                                Same as index, but treats the array position as x-coordinates.
+                                                <span className="interpolation-formula">y = y₁ + (p - p₁) * (y₂ - y₁) / (p₂ - p₁) where p is position</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'pad' && (
+                                            <>
+                                                Forward-fills each NaN from the last non-null value.
+                                                <span className="interpolation-formula">y = y_prev</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'nearest' && (
+                                            <>
+                                                Nearest-neighbor interpolation (steps).
+                                                <span className="interpolation-formula">y = y_nearest where nearest is the closest known point</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'zero' && (
+                                            <>
+                                                Zero-order spline (step function).
+                                                <span className="interpolation-formula">y = y_left where left is the previous known point</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'slinear' && (
+                                            <>
+                                                First-order spline via SciPy.
+                                                <span className="interpolation-formula">y = a + b*x where a and b are coefficients from piecewise linear fit</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'quadratic' && (
+                                            <>
+                                                Second-order spline interpolation.
+                                                <span className="interpolation-formula">y = a + b*x + c*x² where a, b, c are coefficients from piecewise quadratic fit</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'cubic' && (
+                                            <>
+                                                Third-order spline interpolation.
+                                                <span className="interpolation-formula">y = a + b*x + c*x² + d*x³ where a, b, c, d are coefficients from piecewise cubic fit</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'barycentric' && (
+                                            <>
+                                                Barycentric Lagrange interpolation (rational form).
+                                                <span className="interpolation-formula">y = Σ(wᵢ * yᵢ / (x - xᵢ)) / Σ(wᵢ / (x - xᵢ)) where wᵢ are weights</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'polynomial' && (
+                                            <>
+                                                Polynomial interpolation of specified degree.
+                                                <span className="interpolation-formula">y = Σ(aᵢ * xⁱ) for i=0 to n where n is the polynomial degree</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'spline' && (
+                                            <>
+                                                Univariate spline interpolation.
+                                                <span className="interpolation-formula">Piecewise polynomial with continuous derivatives up to order k-1</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'krogh' && (
+                                            <>
+                                                Hermite-style polynomial interpolation matching derivatives at knots.
+                                                <span className="interpolation-formula">y = Σ(f(xᵢ) * hᵢ(x) + f'(xᵢ) * kᵢ(x)) where hᵢ and kᵢ are Hermite basis functions</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'piecewise_polynomial' && (
+                                            <>
+                                                Piecewise polynomial interpolation.
+                                                <span className="interpolation-formula">Different polynomial for each interval with specified continuity conditions</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'pchip' && (
+                                            <>
+                                                Monotonic cubic Hermite interpolation (PCHIP).
+                                                <span className="interpolation-formula">Piecewise cubic with shape-preserving properties</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'akima' && (
+                                            <>
+                                                Akima's piecewise cubic interpolation.
+                                                <span className="interpolation-formula">Piecewise cubic with local slope estimation</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'cubicspline' && (
+                                            <>
+                                                Cubic spline with configurable boundary conditions.
+                                                <span className="interpolation-formula">Piecewise cubic with continuous second derivatives</span>
+                                            </>
+                                        )}
+                                        {linearInterpolationMethod === 'from_derivatives' && (
+                                            <>
+                                                Constructs a polynomial piecewise from given value and derivative pairs.
+                                                <span className="interpolation-formula">y = Σ(f⁽ᵏ⁾(xᵢ) * (x-xᵢ)ᵏ / k!) where f⁽ᵏ⁾ is the k-th derivative</span>
+                                            </>
+                                        )}
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Only show trend and seasonality options for ARIMA */}

@@ -536,7 +536,8 @@ async def impute_dataset(request: ImputeRequest):
     else:
         try:
             if imputer.__class__.__name__ == "LinearInterpolationModel":
-                imputed_data = imputer.impute(df)
+                method = model_params.get("method", "linear")
+                imputed_data = imputer.impute(df, method=method)
 
             elif imputer.__class__.__name__ == "ARIMAImputationModel" and model_params:
                 order = tuple(model_params.get("order", (1, 1, 1)))
@@ -800,7 +801,7 @@ async def get_imputed_dataset(request: ImputeRequest):
         def get_model_by_name(model_name: str):
             model_mapping = {
                 "linear_interpolation": LinearInterpolationModel(),
-                # "mean_imputation": lambda df: df.fillna(df.mean()),
+                "mean_imputation": lambda df: df.fillna(df.mean()),
                 # "knn_imputation": KNNImputationModel(),
                 # "regression_imputation": RegressionImputationModel(),
                 "arima_imputation": ARIMAImputationModel(),
@@ -824,7 +825,11 @@ async def get_imputed_dataset(request: ImputeRequest):
             imputed_df = imputer(df)
         else:
             try:
-                if imputer.__class__.__name__ == "ARIMAImputationModel" and model_params:
+                if imputer.__class__.__name__ == "LinearInterpolationModel":
+                    method = model_params.get("method", "linear")
+                    imputed_df = imputer.impute(df, method=method)
+
+                elif imputer.__class__.__name__ == "ARIMAImputationModel" and model_params:
                     order = tuple(model_params.get("order", (1, 1, 1)))
                     seasonal_order = tuple(model_params.get("seasonal_order", (1, 1, 1, 1)))
                     y_column = model_params.get("y_column", None)
@@ -991,16 +996,11 @@ async def download_imputed_dataset(dataset_id: str):
     def get_model_by_name(model_name: str):
         model_mapping = {
             "linear_interpolation": LinearInterpolationModel(),
-            "spline_interpolation": SplineImputationModel(),
             "mean_imputation": lambda df: df.fillna(df.mean()),
-            "ffill": lambda df: df.fillna(method="ffill"),
-            "bfill": lambda df: df.fillna(method="bfill"),
             "knn_imputation": KNNImputationModel(),
-            "regression_imputation": RegressionImputationModel(),
-            "mice_imputation": MICEImputationModel(),
             "arima_imputation": ARIMAImputationModel(),
             "gb_imputation": GradientBoostingImputationModel(),
-            "lstm_imputation": None,  # Placeholder
+            "lstm_imputation": None,
             "exponential_smoothing": ExponentialSmoothingModel(),
         }
         return model_mapping.get(model_name.lower())

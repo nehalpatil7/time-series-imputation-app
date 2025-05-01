@@ -1,5 +1,4 @@
 from .linear_interpolation import LinearInterpolationModel
-from .spline_interpolation import SplineImputationModel
 from .exponential_smoothing import ExponentialSmoothingModel
 from .arima_imputation import ARIMAImputationModel
 from .knn_imputation import KNNImputationModel
@@ -10,12 +9,9 @@ from .lstm_imputation import LSTMImputationModel
 
 __all__ = [
     "LinearInterpolationModel",
-    "SplineImputationModel",
     "ExponentialSmoothingModel",
     "ARIMAImputationModel",
     "KNNImputationModel",
-    "RegressionImputationModel",
-    "MICEImputationModel",
     "GradientBoostingImputationModel",
     "LSTMImputationModel"
 ]

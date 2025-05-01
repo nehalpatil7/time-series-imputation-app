@@ -97,43 +97,55 @@ const selectModel = async (datasetId, overrideModel) => {
 };
 
 // Perform imputation on the dataset
-const imputeDataset = async (datasetId, selectedModel, selectedYColumn, arimaParams = null) => {
+const imputeDataset = async (datasetId, selectedModel, selectedYColumn, modelParams = null) => {
     const requestData = {
         dataset_id: datasetId,
         selected_model: selectedModel,
         selected_y_column: selectedYColumn
     };
 
-    // Include ARIMA parameters if provided and the model is ARIMA
-    if (selectedModel === 'arima_imputation' && arimaParams) {
-        requestData.model_params = {
-            order: [arimaParams.p, arimaParams.d, arimaParams.q],
-            seasonal_order: [arimaParams.P, arimaParams.D, arimaParams.Q, arimaParams.s],
-            y_column: selectedYColumn || arimaParams.y_column,
-            hasSeasonality: arimaParams.hasSeasonality
-        };
+    // Include model parameters if provided
+    if (modelParams) {
+        if (selectedModel === 'arima_imputation') {
+            requestData.model_params = {
+                order: [modelParams.p, modelParams.d, modelParams.q],
+                seasonal_order: [modelParams.P, modelParams.D, modelParams.Q, modelParams.s],
+                y_column: selectedYColumn || modelParams.y_column,
+                hasSeasonality: modelParams.hasSeasonality
+            };
+        } else if (selectedModel === 'linear_interpolation') {
+            requestData.model_params = {
+                method: modelParams.method
+            };
+        }
     }
 
     const response = await axios.post(`${apiBaseUrl}/impute`, requestData);
-
     return response.data;
 };
 
 // Get imputed dataset for visualization
-const getImputedDataset = async (datasetId, selectedModel, selectedYColumn, arimaParams = null) => {
+const getImputedDataset = async (datasetId, selectedModel, selectedYColumn, modelParams = null) => {
     const requestData = {
         dataset_id: datasetId,
         selected_model: selectedModel,
         selected_y_column: selectedYColumn
     };
 
-    if (selectedModel === 'arima_imputation' && arimaParams) {
-        requestData.model_params = {
-            order: [arimaParams.p, arimaParams.d, arimaParams.q],
-            seasonal_order: [arimaParams.P, arimaParams.D, arimaParams.Q, arimaParams.s],
-            y_column: arimaParams.y_column,
-            hasSeasonality: arimaParams.hasSeasonality
-        };
+    // Include model parameters if provided
+    if (modelParams) {
+        if (selectedModel === 'arima_imputation') {
+            requestData.model_params = {
+                order: [modelParams.p, modelParams.d, modelParams.q],
+                seasonal_order: [modelParams.P, modelParams.D, modelParams.Q, modelParams.s],
+                y_column: selectedYColumn || modelParams.y_column,
+                hasSeasonality: modelParams.hasSeasonality
+            };
+        } else if (selectedModel === 'linear_interpolation') {
+            requestData.model_params = {
+                method: modelParams.method
+            };
+        }
     }
 
     const response = await axios.post(`${apiBaseUrl}/imputed_dataset`, requestData);
